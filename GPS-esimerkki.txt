@@ -1,0 +1,102 @@
+#include <AllThingsTalk_LTEM.h>
+#include <LED.h>
+#include <Wire.h>
+#include "TimeLib.h"
+#include "Sodaq_UBlox_GPS.h"
+#include "keys.h"
+
+#define debugSerial SerialUSB
+#define modemSerial Serial1
+
+struct unix {
+  long get(int y, int m = 0, int d = 0, int h = 0, int i = 0, int s = 0) {
+    setTime(h, i, s, d, m, y);
+    adjustTime(-10800); // +3
+    return now();
+  }
+} unix;
+
+APICredentials credentials(SPACE_ENDPOINT, DEVICE_TOKEN, DEVICE_ID);
+AllThingsTalk_LTEM att(modemSerial, credentials, APN);
+CborPayload payload;
+
+LED led;
+
+unsigned long previousMillis;
+int           gpsTimeout     = 120;     // Number of seconds before GPS fix times out
+int           sendInterval   = 90;   // Seconds
+bool          lock           = false;
+bool          alarm          = false;
+
+void setup() {
+  debugSerial.begin(115200);
+  while (!debugSerial && millis() < 10000) {}
+  att.debugPort(debugSerial, true);
+  led.setLight(led.MAGENTA);
+  led.setLight(led.GREEN, true);
+  delay(1000);
+  led.setLight(led.OFF);
+  initGPS();
+  led.setLight(led.BLUE);
+  if (att.init()) {
+    led.setLight(led.GREEN, true);
+  } else {
+    setSetupError("AllThingsTalk LTE-M Initialization Failed - Lopetetaan");
+  }
+}
+
+void sendData() {
+  led.setLight(led.YELLOW);  // Yellow - Searching for GPS
+  debugSerial.println("Trying to get GPS fix (timeout 2 minutes)");
+  if (sodaq_gps.scan(false, gpsTimeout * 1000)) { // Wait for GPS fix
+    led.setLight(led.WHITE);
+    GeoLocation geoLocation(sodaq_gps.getLat(), sodaq_gps.getLon(), 0); // Saves the current GPS coordinates
+    payload.reset();
+    payload.set("loc", geoLocation);
+    debugSerial.print("Geolocation: ");
+    debugSerial.print(sodaq_gps.getLat(),7);
+    debugSerial.print(", ");
+    debugSerial.println(sodaq_gps.getLon(),7);
+  } else {
+    GeoLocation geoLocation(0, 0, 0); // Reset the GPS coordinates
+    payload.reset();
+    payload.set("loc", geoLocation);
+    debugSerial.print("Geolocation: ");
+    debugSerial.println("0, 0");
+    debugSerial.print("Ei löytynyt!");
+  }
+  if (att.send(payload)) { // Send the payload
+    led.setLight(led.GREEN);
+  } else {
+    led.setLight(led.RED);
+  }
+  delay(1000);
+  led.setLight(led.OFF);
+}
+
+
+void initGPS() {
+  sodaq_gps.init(GPS_ENABLE);
+}
+
+void setSetupError(char* message) {
+  debugSerial.println(message);
+  led.setLight(led.RED, true, 10);
+
+  exit(0);
+}
+
+
+void loop() {
+  // Keep the modem and the connection towards AllThingsTalk alive
+  att.loop(); 
+
+  // Send "first" location
+  sendData();
+
+  // Send location every [sendInterval]
+  if (millis() - previousMillis > sendInterval*1000) {
+    sendData();
+    previousMillis = millis();
+  }
+}

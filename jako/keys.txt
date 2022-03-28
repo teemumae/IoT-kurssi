@@ -1,0 +1,14 @@
+#ifndef KEYS_h
+#define KEYS_h
+
+// AllThingsTalk Device Authentication
+char* DEVICE_ID = "swOL8xE3XxEPlWoFajTcnWYk";
+char* DEVICE_TOKEN = "osao:4PoMhHrOKmy7kPBUpn3fi2Y3Rpgyi4w5zVNZanjq";
+
+// Enter APN of your LTE-M Service Provider
+char* APN = "m2mc.simservices";
+
+// AllThingsTalk Space Endpoint (leave as is if unfamiliar)
+char* SPACE_ENDPOINT = "osao.allthingstalk.io";
+
+#endif
